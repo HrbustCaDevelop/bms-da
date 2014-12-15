@@ -5,62 +5,26 @@
 #include <math.h>
 #include <Ethernet.h>
 
+// ------- SD begin ---------
 int SDPin = 4;
 int port;
-
 File file;
+// ------- SD end -----------
+
+// ------- Ethernet begin ---
 IPAddress server;
 byte mac[] = { 0xB8, 0x27, 0xEB, 0xFE, 0xB2, 0x49 };
 EthernetClient cli;
+// ------- Ethernet end -----
 
-void setup() 
-{
-  Serial.begin(9600);
-  loadIP(server, port);
-  Serial.println("[+] DHCP configuration start...");
-  // DHCP 初始化
-  while (Ethernet.begin(mac) != 1) {
-    Serial.println(" [-] DHCP configuration fail.");
-    delay(1000);
-  }
-  Serial.print(" [-] DHCP configuration successful. \n [-] IP : ");
-  for (byte i = 0; i < 4; i++) {
-    // 打印IP地址:
-    Serial.print(Ethernet.localIP()[i], DEC);
-    (i < 3) ? Serial.print('.'):Serial.println();
-  }
-  delay(1000);
-}
-
-void loop()
-{
-  Serial.println();
-  Serial.println("[+] connecting...");
-  // HTTP报文准备的，保存post参数，
-  String hcontent = "username=hanzai";
-
-  if (cli.connect(server, port)) {
-    Serial.println(" [-] connected...");
-    // 格式化HTTP头
-    Serial.println(" [-] forming & send HTTP request message");
-    // post到指定的页面
-    cli.println("POST /bms/user/checkusername HTTP/1.1");
-    cli.println("Host: hrbust.edu.cn");
-    cli.println("Content-Type: application/x-www-form-urlencoded");
-    cli.println("Connection: close");
-    cli.print("Content-Length: ");
-    cli.println(hcontent.length());
-    cli.println();
-    cli.print(hcontent);
-    cli.println();
-    delay(1000);
-    cli.stop();
-    Serial.println(" [-] connection over.");
-  } else {
-    Serial.println(" [-] connection failure.");
-  }
-  delay(5000);
-}
+// ------- Xbee begin -------
+String serialnum ="";
+char lsb[8];
+double temperature,co,flash,hum = 50;
+XBee xbee = XBee();
+ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
+XBeeAddress64 test = XBeeAddress64();
+// ------- Xbee end ---------
 
 //从sd卡加载ip地址和端口
 void loadIP(IPAddress &ip, int &port) {
@@ -82,7 +46,6 @@ void loadIP(IPAddress &ip, int &port) {
       tempstr+=c;
     }
   }
-
   file.close();
   tempstr.trim();
   ip_part1 = tempstr.substring(0,tempstr.indexOf('.')).toInt();
@@ -99,4 +62,135 @@ void loadIP(IPAddress &ip, int &port) {
   Serial.println(ip);
   Serial.print(" [-] Get target port : ");
   Serial.println(port);
+}
+
+//DHCP初始化网卡ip
+void DHCP() {
+  Serial.println("[+] DHCP configuration start...");
+  while (Ethernet.begin(mac) != 1) {
+    Serial.println(" [-] DHCP configuration fail.");
+    delay(1000);
+  }
+  Serial.print(" [-] DHCP configuration successful. \n [-] IP : ");
+  for (byte i = 0; i < 4; i++) {
+    Serial.print(Ethernet.localIP()[i], DEC);
+    (i < 3) ? Serial.print('.'):Serial.println();
+  }
+  delay(1000);
+}
+
+//通过Xbee读取传感器数据
+void xbeeReader() {
+  xbee.readPacket();
+  
+  if (xbee.getResponse().isAvailable()) {
+    if (xbee.getResponse().getApiId() == ZB_IO_SAMPLE_RESPONSE) {
+      xbee.getResponse().getZBRxIoSampleResponse(ioSample);
+
+      Serial.println();
+      Serial.println("[+]Received I/O Sample.");
+
+      //获取SN
+      ltoa(ioSample.getRemoteAddress64().getLsb(),lsb,16);
+      serialnum = lsb;
+      serialnum.toUpperCase();
+
+      //获取温度数据
+      temperature = ceil((ioSample.getAnalog(1)*120/1024));
+
+      //获取一氧化碳
+      co = ceil((ioSample.getAnalog(2)*120/1024)) + 10;
+      
+      //获取光线强度
+      flash = ceil((ioSample.getAnalog(3)*120/1024));
+
+      Serial.print("serialnum:");
+      Serial.print(serialnum);
+      Serial.print(" temperature:");
+      Serial.print(temperature);
+      Serial.print(" co:");
+      Serial.print(co);
+      Serial.print(" flash:");
+      Serial.println(flash);
+    } 
+    else {
+      Serial.print(" [-]Expected I/O Sample, because : ");
+      Serial.print(xbee.getResponse().getApiId(), HEX);
+    }    
+  } 
+  else if (xbee.getResponse().isError()) {
+    Serial.print(" [-]Error reading packet. Error code: ");  
+    Serial.println(xbee.getResponse().getErrorCode());
+  }
+}
+
+void dataSender(String targetPath, String serialnum, double temp, double co, double flash, double hum = 50) {
+  //构造post参数
+  String postdata = "temperature=";
+  postdata+=temp;
+  postdata+="&humidity=";
+  postdata+=hum;
+  postdata+="&co=";
+  postdata+=co;
+  postdata+="&smoke=";
+  postdata+=flash;
+  postdata+="&serialnum=";
+  postdata+=serialnum;
+  Serial.print("[+]post body : ");
+  Serial.println(postdata);
+
+  Serial.println();
+  Serial.println("[+] connecting...");
+  if (cli.connect(server, port)) {
+    Serial.println(" [-] connected...");
+    // 格式化HTTP头
+    Serial.println(" [-] forming & send HTTP request message");
+    // post到指定的页面
+    cli.print("POST ");
+    cli.print(targetPath);
+    cli.println(" HTTP/1.1");
+    cli.println("Host: hrbust.edu.cn");
+    cli.println("Content-Type: application/x-www-form-urlencoded");
+    cli.println("Connection: close");
+    cli.print("Content-Length: ");
+    cli.println(postdata.length());
+    cli.println();
+    cli.print(postdata);
+    cli.println();
+    delay(1000);
+    cli.stop();
+
+// 得到回复，如果服务端还在链接的话。
+    if (cli.available())
+    {
+      while(cli.available())
+      {
+        char recv = cli.read();
+        Serial.print(recv);
+      }
+    } else {
+      Serial.println("[-] no response received.");
+    }
+
+    Serial.println();
+    Serial.println(" [-] connection over.");
+  } else {
+    Serial.println(" [-] connection failure.");
+  }
+  delay(5000);
+}
+
+void setup() 
+{
+  Serial.begin(9600);
+  Serial1.begin(9600);
+
+  loadIP(server, port);
+  DHCP();
+}
+
+void loop()
+{
+  xbeeReader();
+  dataSender("/bms/sensordata/add", serialnum, temperature, co, flash, hum);
 }
