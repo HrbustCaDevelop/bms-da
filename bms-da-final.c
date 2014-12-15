@@ -1,5 +1,8 @@
 #include <SPI.h>
 #include <SD.h>
+#include <stdlib.h>
+#include <XBee.h>
+#include <math.h>
 #include <Ethernet.h>
 
 int SDPin = 4;
@@ -13,9 +16,7 @@ EthernetClient cli;
 void setup() 
 {
   Serial.begin(9600);
-
   loadIP(server, port);
-
   Serial.println("[+] DHCP configuration start...");
   // DHCP 初始化
   while (Ethernet.begin(mac) != 1) {
@@ -28,7 +29,6 @@ void setup()
     Serial.print(Ethernet.localIP()[i], DEC);
     (i < 3) ? Serial.print('.'):Serial.println();
   }
-  // 这里必须暂停等待所有都初始化完毕。
   delay(1000);
 }
 
@@ -38,12 +38,10 @@ void loop()
   Serial.println("[+] connecting...");
   // HTTP报文准备的，保存post参数，
   String hcontent = "username=hanzai";
-  
-  // 尝试链接到服务器
-  if (cli.connect(server, port))
-  {
+
+  if (cli.connect(server, port)) {
     Serial.println(" [-] connected...");
-    // 格式化HTTP头，可以添加useragent等，但是不能删除现有的，否则会提交失败
+    // 格式化HTTP头
     Serial.println(" [-] forming & send HTTP request message");
     // post到指定的页面
     cli.println("POST /bms/user/checkusername HTTP/1.1");
@@ -55,11 +53,9 @@ void loop()
     cli.println();
     cli.print(hcontent);
     cli.println();
-    // 等待1秒来得到服务器的回复
-    // 这里如果不等待的话下面的cli.available()还没得到对方服务就会认为对方没有发送返回信息
     delay(1000);
     cli.stop();
-    Serial.println(" [-] connection termination success.");
+    Serial.println(" [-] connection over.");
   } else {
     Serial.println(" [-] connection failure.");
   }
