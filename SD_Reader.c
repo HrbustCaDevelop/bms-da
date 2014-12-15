@@ -4,16 +4,17 @@
 
 int SDPin = 4;
 int port;
+String targetpath;
 IPAddress ip;
 File file;
 
 void setup() {
   Serial.begin(9600);
-  loadIP(ip, port);
+  loadIP();
 }
 
 //从sd卡加载ip地址和端口
-void loadIP(IPAddress &ip, int &port) {
+void loadIP() {
 
   int ip_part1, ip_part2, ip_part3, ip_part4;
 
@@ -26,7 +27,7 @@ void loadIP(IPAddress &ip, int &port) {
   }
 
   Serial.println("[+] Initialization Done.");
-  file = SD.open("ip.txt");
+  file = SD.open("target.txt");
   String tempstr;
   if (file) {
     while (file.available()) {
@@ -35,20 +36,26 @@ void loadIP(IPAddress &ip, int &port) {
     }
   }
 
+  int cursor;
+
   file.close();
   tempstr.trim();
-  ip_part1 = tempstr.substring(0,tempstr.indexOf('.')).toInt();
+  ip_part1 = tempstr.substring(0, tempstr.indexOf('.')).toInt();
   tempstr = tempstr.substring(tempstr.indexOf('.')+1);
-  ip_part2 = tempstr.substring(0,tempstr.indexOf('.')).toInt();
+  ip_part2 = tempstr.substring(0, tempstr.indexOf('.')).toInt();
   tempstr = tempstr.substring(tempstr.indexOf('.')+1);
-  ip_part3 = tempstr.substring(0,tempstr.indexOf('.')).toInt();
+  ip_part3 = tempstr.substring(0, tempstr.indexOf('.')).toInt();
   tempstr = tempstr.substring(tempstr.indexOf('.')+1);
-  ip_part4 = tempstr.substring(0,tempstr.indexOf(':')).toInt();
-  port = tempstr.substring(tempstr.indexOf(':')+1).toInt(); 
+  ip_part4 = tempstr.substring(0, tempstr.indexOf(':')).toInt();
+  tempstr = tempstr.substring(tempstr.indexOf(':')+1);
+  port = tempstr.substring(0, tempstr.indexOf('/')).toInt(); 
+  targetpath = tempstr.substring(tempstr.indexOf('/')); 
+
   IPAddress _ip(ip_part1,ip_part2,ip_part3,ip_part4);
   ip = _ip;
   Serial.println(ip);
   Serial.println(port);
+  Serial.println(targetpath);
 }
 
 void loop() {

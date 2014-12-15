@@ -8,6 +8,7 @@
 // ------- SD begin ---------
 int SDPin = 4;
 int port;
+String targetpath;
 File file;
 // ------- SD end -----------
 
@@ -27,7 +28,7 @@ XBeeAddress64 test = XBeeAddress64();
 // ------- Xbee end ---------
 
 //从sd卡加载ip地址和端口
-void loadIP(IPAddress &ip, int &port) {
+void loadIP() {
   int ip_part1, ip_part2, ip_part3, ip_part4;
 
   Serial.println("[+] Initializing SD Card.");
@@ -38,7 +39,7 @@ void loadIP(IPAddress &ip, int &port) {
   }
 
   Serial.println(" [-] Initialization SD Card Done.");
-  file = SD.open("ip.txt");
+  file = SD.open("target.txt");
   String tempstr;
   if (file) {
     while (file.available()) {
@@ -54,18 +55,24 @@ void loadIP(IPAddress &ip, int &port) {
   tempstr = tempstr.substring(tempstr.indexOf('.')+1);
   ip_part3 = tempstr.substring(0,tempstr.indexOf('.')).toInt();
   tempstr = tempstr.substring(tempstr.indexOf('.')+1);
-  ip_part4 = tempstr.substring(0,tempstr.indexOf(':')).toInt();
-  port = tempstr.substring(tempstr.indexOf(':')+1).toInt(); 
+  ip_part4 = tempstr.substring(0, tempstr.indexOf(':')).toInt();
+  tempstr = tempstr.substring(tempstr.indexOf(':')+1);
+  port = tempstr.substring(0, tempstr.indexOf('/')).toInt(); 
+  targetpath = tempstr.substring(tempstr.indexOf('/')); 
+
   IPAddress _ip(ip_part1,ip_part2,ip_part3,ip_part4);
-  ip = _ip;
+  server = _ip;
   Serial.print(" [-] Get target ip : ");
-  Serial.println(ip);
+  Serial.println(server);
   Serial.print(" [-] Get target port : ");
   Serial.println(port);
+  Serial.print(" [-] Get target path : ");
+  Serial.println(targetpath);
 }
 
 //DHCP初始化网卡ip
 void DHCP() {
+  Serial.println();
   Serial.println("[+] DHCP configuration start...");
   while (Ethernet.begin(mac) != 1) {
     Serial.println(" [-] DHCP configuration fail.");
@@ -88,7 +95,7 @@ void xbeeReader() {
       xbee.getResponse().getZBRxIoSampleResponse(ioSample);
 
       Serial.println();
-      Serial.println("[+]Received I/O Sample.");
+      Serial.println("[+] Received I/O Sample.");
 
       //获取SN
       ltoa(ioSample.getRemoteAddress64().getLsb(),lsb,16);
@@ -104,7 +111,8 @@ void xbeeReader() {
       //获取光线强度
       flash = ceil((ioSample.getAnalog(3)*120/1024));
 
-      Serial.print("serialnum:");
+      Serial.print(" [-] Data : ");
+      Serial.print(" serialnum:");
       Serial.print(serialnum);
       Serial.print(" temperature:");
       Serial.print(temperature);
@@ -114,12 +122,12 @@ void xbeeReader() {
       Serial.println(flash);
     } 
     else {
-      Serial.print(" [-]Expected I/O Sample, because : ");
+      Serial.print(" [-] Expected I/O Sample, because : ");
       Serial.print(xbee.getResponse().getApiId(), HEX);
     }    
   } 
   else if (xbee.getResponse().isError()) {
-    Serial.print(" [-]Error reading packet. Error code: ");  
+    Serial.print(" [-] Error reading packet. Error code: ");  
     Serial.println(xbee.getResponse().getErrorCode());
   }
 }
@@ -158,9 +166,8 @@ void dataSender(String targetPath, String serialnum, double temp, double co, dou
     cli.print(postdata);
     cli.println();
     delay(1000);
-    cli.stop();
 
-// 得到回复，如果服务端还在链接的话。
+    // 得到回复，如果服务端还在链接的话。
     if (cli.available())
     {
       while(cli.available())
@@ -177,6 +184,8 @@ void dataSender(String targetPath, String serialnum, double temp, double co, dou
   } else {
     Serial.println(" [-] connection failure.");
   }
+
+  cli.stop();
   delay(5000);
 }
 
@@ -185,12 +194,12 @@ void setup()
   Serial.begin(9600);
   Serial1.begin(9600);
 
-  loadIP(server, port);
+  loadIP();
   DHCP();
 }
 
 void loop()
 {
   xbeeReader();
-  dataSender("/bms/sensordata/add", serialnum, temperature, co, flash, hum);
+  dataSender(targetpath, serialnum, temperature, co, flash, hum);
 }
