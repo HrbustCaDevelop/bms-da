@@ -1,8 +1,8 @@
 /*
-	@Author ： zhilong.liu
-	@Date : 2014.12.23 update
-	@Version : 1.2
-	@Memo : 用于楼宇防火监控项目的路由节点的Arduino程序
+  @Author ： zhilong.liu
+  @Date : 2014.12.23 update
+  @Version : 1.2
+  @Memo : 用于楼宇防火监控项目的路由节点的Arduino程序
 */
 
 //Xbee include
@@ -29,19 +29,25 @@
 int currentLine = 0;
 // ------- Screen end -----
 
+// ------- ALERT begin ---------
+#define LingPin 30
+#define SW1Pin 40
+int lingState;
+// ------- ALERT end -----------
+
 // ------- SD begin ---------
 #define SDPin 4
 int port;
 String targetpath;
 File file;
 double _temperature, _co, _flash;
-
 // ------- SD end -----------
 
 // ------- Ethernet begin ---
 IPAddress server;
-byte mac[] = { 0xB8, 0x27, 0xEB, 0xFE, 0xB2, 0x49 };
+byte mac[] = { 0xCC, 0x52, 0xAF, 0xFE, 0xB2, 0x49 };
 EthernetClient cli;
+String dhcpip;
 // ------- Ethernet end -----
 
 // ------- Xbee begin -------
@@ -141,8 +147,8 @@ void print2screen(String input, int linenum) {
   {
     switch (*p) {
       case ' ':
+        set_ascii7x8(linenum, i, *p++);
         i += 3;
-        p++;
         break;
       case '.':
         set_ascii7x8(linenum, i, *p++);
@@ -200,6 +206,8 @@ void loadConfig() {
   Serial.print("[+] Get target path : ");
   Serial.println(targetpath);
 
+  print2screen((String)"+ SERVER:" + (String)ip_part1 + "." + (String)ip_part2 + "." + (String)ip_part3 + "." + (String)ip_part4, 0);
+
   file = SD.open("alert.txt");
   tempstr = "";
   if (file) {
@@ -216,10 +224,6 @@ void loadConfig() {
   Serial.println(_temperature);
   Serial.print("[+] Get _co Red Line : ");
   Serial.println(_co);
-
-  print2screen((String)"TEMPERATURE = " + _temperature, 0);
-  print2screen((String)"CO = " + _co, 1);
-
 }
 
 //DHCP初始化网卡ip
@@ -235,6 +239,7 @@ void DHCP() {
     Serial.print(Ethernet.localIP()[i], DEC);
     (i < 3) ? Serial.print('.') : Serial.println();
   }
+  print2screen((String)"+ LOCAL  :" + (String)(Ethernet.localIP()[0]) + "." + (String)(Ethernet.localIP()[1]) + "." + (String)(Ethernet.localIP()[2]) + "." + (String)(Ethernet.localIP()[3]), 1);
   delay(1000);
 }
 
@@ -272,6 +277,10 @@ void xbeeReader() {
       Serial.print(co);
       Serial.print(" flash:");
       Serial.println(flash);
+
+      print2screen((String)"+ CURRENT : " + (String)serialnum, 2);
+      print2screen((String)"- TEM[" + (String)temperature + (String)"] CO[" + (String)co + "]", 3);
+      print2screen((String)"- FIRE[" + (String)flash + "]", 4);
     }
     else {
       Serial.print(" [-] Expected I/O Sample, because : ");
@@ -288,11 +297,13 @@ void xbeeReader() {
 void dataSender(String targetPath, String postdata) {
   Serial.print("[+]post body : ");
   Serial.println(postdata);
-
+  print2screen((String)"- ------------------", 5);
   Serial.println();
   Serial.println("[+] connecting...");
+  print2screen((String)"+ NET CONNECTING         ", 6);
   if (cli.connect(server, port)) {
-    Serial.println(" [-] connected...");
+    Serial.println(" [-] connected");
+    print2screen((String)"+ NET CONNECTED             ", 6);
     // 格式化HTTP头
     Serial.println(" [-] forming & send HTTP request message");
     // post到指定的页面
@@ -319,12 +330,15 @@ void dataSender(String targetPath, String postdata) {
       }
     } else {
       Serial.println("[-] no response received.");
+      print2screen((String)"+ NO RESPONSE", 6);
     }
 
     Serial.println();
-    Serial.println(" [-] connection over.");
+    Serial.println(" [-] connection over");
+    print2screen((String)"+ SEND SUCCESS", 6);
   } else {
     Serial.println(" [-] connection failure.");
+    print2screen((String)"+ SEND FAILED", 6);
   }
 
   cli.stop();
@@ -339,6 +353,12 @@ void setup()
   // Screen start
   pinMode(RES, OUTPUT); //RES
   pinMode(DC, OUTPUT); //D/C#
+  pinMode(LingPin, OUTPUT); //LingLingLing
+  pinMode(SW1Pin,INPUT);
+
+  lingState = digitalRead(SW1Pin);
+  attachInterrupt(SW1Pin,ling,CHANGE);
+
   digitalWrite(DC, LOW);
   Wire.begin();
   init_oled();
@@ -351,16 +371,28 @@ void setup()
   //dhcp获取本机ip
   DHCP();
 }
+void ling()
+{
+  lingState = 0;
+  digitalWrite(LingPin,lingState);
+}
 
-void fireInHole(String serialnum, double temperature, double co, double flash) {
-
+//检查报警状态
+void checkFire(String serialnum, double temperature, double co, double flash) {
+  if (temperature > _temperature && co > _co && digitalRead(SW1Pin)==HIGH) {
+    print2screen((String)"= [ALERT] : [" + (String)serialnum + "]", 7);
+      lingState = 1;
+      digitalWrite(LingPin,lingState);
+  } else  {
+    print2screen((String)"= [ALERT] : [NONE]", 7);
+  }
 }
 
 void loop()
 {
   xbeeReader();
 
-  fireInHole(serialnum, temperature, co, flash);
+  checkFire(serialnum, temperature, co, flash);
 
   //构造post参数
   String postdata = "temperature=";
