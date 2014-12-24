@@ -39,6 +39,7 @@ int lingState;
 #define SDPin 4
 int port;
 String targetpath;
+String alertpath;
 File file;
 double _temperature, _co, _flash;
 // ------- SD end -----------
@@ -218,12 +219,16 @@ void loadConfig() {
   }
   file.close();
   tempstr.trim();
+
   _temperature = tempstr.substring(0, tempstr.indexOf('.')).toInt();
-  _co = tempstr.substring(tempstr.indexOf('.') + 1).toInt();
+  tempstr = tempstr.substring(tempstr.indexOf('.') + 1);
+  _co = tempstr.substring(0, tempstr.indexOf('/')).toInt();
+  alertpath = tempstr.substring(tempstr.indexOf('/')); 
   Serial.print("[+] Get _temperature Red Line : ");
   Serial.println(_temperature);
   Serial.print("[+] Get _co Red Line : ");
   Serial.println(_co);
+  Serial.println((String)"[+] Get alertpath : " + (String)alertpath);
 }
 
 //DHCP初始化网卡ip
@@ -345,6 +350,41 @@ void dataSender(String targetPath, String postdata) {
   delay(5000);
 }
 
+void ling()
+{
+  lingState = 0;
+  digitalWrite(LingPin,lingState);
+}
+
+//构造普通的post请求数据
+String generateNormalPost() {
+  String postdata = "temperature=";
+  postdata += temperature;
+  postdata += "&humidity=";
+  postdata += 50;
+  postdata += "&co=";
+  postdata += co;
+  postdata += "&smoke=";
+  postdata += flash;
+  postdata += "&serialnum=";
+  postdata += serialnum;
+  return postdata;
+}
+
+//检查报警状态
+void checkFire(String serialnum, double temperature, double co, double flash) {
+  if (temperature > _temperature && co > _co && digitalRead(SW1Pin)==HIGH) {
+      print2screen((String)"= [ALERT] : [" + (String)serialnum + "]", 7);
+      lingState = 1;
+      digitalWrite(LingPin,lingState);
+      String alertpostbody = "serialnum=";
+      alertpostbody += serialnum;
+      dataSender(alertpath, alertpostbody);
+  } else  {
+    print2screen((String)"= [ALERT] : [NONE]", 7);
+  }
+}
+
 void setup()
 {
   Serial.begin(9600);
@@ -371,40 +411,10 @@ void setup()
   //dhcp获取本机ip
   DHCP();
 }
-void ling()
-{
-  lingState = 0;
-  digitalWrite(LingPin,lingState);
-}
-
-//检查报警状态
-void checkFire(String serialnum, double temperature, double co, double flash) {
-  if (temperature > _temperature && co > _co && digitalRead(SW1Pin)==HIGH) {
-    print2screen((String)"= [ALERT] : [" + (String)serialnum + "]", 7);
-      lingState = 1;
-      digitalWrite(LingPin,lingState);
-  } else  {
-    print2screen((String)"= [ALERT] : [NONE]", 7);
-  }
-}
 
 void loop()
 {
   xbeeReader();
-
   checkFire(serialnum, temperature, co, flash);
-
-  //构造post参数
-  String postdata = "temperature=";
-  postdata += temperature;
-  postdata += "&humidity=";
-  postdata += 50;
-  postdata += "&co=";
-  postdata += co;
-  postdata += "&smoke=";
-  postdata += flash;
-  postdata += "&serialnum=";
-  postdata += serialnum;
-
-  dataSender(targetpath, postdata);
+  dataSender(targetpath, generateNormalPost());
 }
