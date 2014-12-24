@@ -132,18 +132,29 @@ void set_ascii7x8(byte line, byte bit, byte ascii) {
 //打印一行到指定行
 //@param input : 输入
 //@linenum : 行号
-void print2screen(char * input, int linenum) {
-  int i = 0;
-  while (*input != '\0' && i < 122)
+void print2screen(String input, int linenum) {
+  int input_Length = input.length() + 1, i = 0;
+  char tempchar[input_Length];
+  char *p = tempchar;
+  input.toCharArray(tempchar, input_Length);
+  while (*p != '\0' && i < 122)
   {
-    switch (*input) {
+    switch (*p) {
       case ' ':
         i += 3;
-        input++;
+        p++;
+        break;
+      case '.':
+        set_ascii7x8(linenum, i, *p++);
+        i += 3;
+        break;
+      case ':':
+        set_ascii7x8(linenum, i, *p++);
+        i += 3;
         break;
       default :
-        set_ascii7x8(linenum, i, *input++);
-        i += 7;
+        set_ascii7x8(linenum, i, *p++);
+        i += 6;
     }
   }
 }
@@ -190,7 +201,7 @@ void loadConfig() {
   Serial.println(targetpath);
 
   file = SD.open("alert.txt");
-  String tempstr;
+  tempstr = "";
   if (file) {
     while (file.available()) {
       char c = file.read();
@@ -199,10 +210,16 @@ void loadConfig() {
   }
   file.close();
   tempstr.trim();
-  _temperature = tempstr.substring(0, tempstr.indexOf('.')).toDouble();
-  _co = tempstr.substring(tempstr.indexOf('.') + 1).toDouble();
-  Serial.print("[+] Get target path : ");
-  Serial.print("[+] Get target path : ");
+  _temperature = tempstr.substring(0, tempstr.indexOf('.')).toInt();
+  _co = tempstr.substring(tempstr.indexOf('.') + 1).toInt();
+  Serial.print("[+] Get _temperature Red Line : ");
+  Serial.println(_temperature);
+  Serial.print("[+] Get _co Red Line : ");
+  Serial.println(_co);
+
+  print2screen((String)"TEMPERATURE = " + _temperature, 0);
+  print2screen((String)"CO = " + _co, 1);
+
 }
 
 //DHCP初始化网卡ip
@@ -347,7 +364,7 @@ void loop()
 
   //构造post参数
   String postdata = "temperature=";
-  postdata += temp;
+  postdata += temperature;
   postdata += "&humidity=";
   postdata += 50;
   postdata += "&co=";
