@@ -282,10 +282,9 @@ void xbeeReader() {
       Serial.print(co);
       Serial.print(" flash:");
       Serial.println(flash);
-
-      print2screen((String)"+ CURRENT : " + (String)serialnum, 2);
-      print2screen((String)"- TEM[" + (String)temperature + (String)"] CO[" + (String)co + "]", 3);
-      print2screen((String)"- FIRE[" + (String)flash + "]", 4);
+      print2screen("-------------------------", 2);
+      print2screen((String)"+ CURRENT : [" + (String)serialnum + (String)"] ", 3);
+      print2screen((String)"+ T [" + (String)temperature + (String)"]   CO [" + (String)co + "]", 4);
     }
     else {
       Serial.print(" [-] Expected I/O Sample, because : ");
@@ -302,7 +301,7 @@ void xbeeReader() {
 void dataSender(String targetPath, String postdata) {
   Serial.print("[+]post body : ");
   Serial.println(postdata);
-  print2screen((String)"- ------------------", 5);
+  print2screen((String)"----------------------", 5);
   Serial.println();
   Serial.println("[+] connecting...");
   print2screen((String)"+ NET CONNECTING         ", 6);
@@ -380,8 +379,6 @@ void checkFire(String serialnum, double temperature, double co, double flash) {
       String alertpostbody = "serialnum=";
       alertpostbody += serialnum;
       dataSender(alertpath, alertpostbody);
-  } else  {
-    print2screen((String)"= [ALERT] : [NONE]", 7);
   }
 }
 
@@ -410,6 +407,7 @@ void setup()
   loadConfig();
   //dhcp获取本机ip
   DHCP();
+  print2screen((String)"= [ALERT] : [NONE]", 7);
 }
 
 void loop()
